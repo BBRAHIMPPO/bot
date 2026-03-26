@@ -1,162 +1,128 @@
 import telebot
 import sqlite3
+import os
+from flask import Flask
+from threading import Thread
+from telebot import types
 
-# Token ديالك
-TOKEN = "7225070696:AAEBSquEmyDCzz0o65GoVPHIG2Xk5qBf_Lg"
+# --- Configuration / الإعدادات ---
+TOKEN = "7225070696:AAEBSquEmyDCzz0o65GoVPHIG2Xk5qB"
+ADMIN_ID = 8718991554
+# ضروري تحط يوزر القناة هنا (مثال: @joseph_fixed) باش يخدم قفل الاشتراك
+CHANNEL_USERNAME = "@YourChannelUsername" 
+CHANNEL_URL = "https://t.me/+wZCOH72-1To3YWFk"
+
 bot = telebot.TeleBot(TOKEN)
 
-# كلمة السر باش تولي Admin
-ADMIN_CODE = "0718991554"
-
-# إعداد قاعدة البيانات
+# --- Database / قاعدة البيانات ---
 def init_db():
     conn = sqlite3.connect('bot_data.db', check_same_thread=False)
-    c = conn.cursor()
-    c.execute('CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, username TEXT, first_name TEXT)')
-    c.execute('CREATE TABLE IF NOT EXISTS admins (admin_id INTEGER PRIMARY KEY)')
-    c.execute('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)')
-    
-    # رسالة الترحيب الافتراضية
-    c.execute('INSERT OR IGNORE INTO settings (key, value) VALUES ("reply_msg", "Join my official channel now\nhttps://t.me/+wZCOH72-1To3YWFk")')
+    cursor = conn.cursor()
+    cursor.execute('CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY)')
     conn.commit()
     conn.close()
 
-init_db()
-
-# دوال مساعدة لقاعدة البيانات
-def get_admins():
-    conn = sqlite3.connect('bot_data.db')
-    c = conn.cursor()
-    c.execute('SELECT admin_id FROM admins')
-    admins = [row[0] for row in c.fetchall()]
+def add_user(user_id):
+    conn = sqlite3.connect('bot_data.db', check_same_thread=False)
+    cursor = conn.cursor()
+    cursor.execute('INSERT OR IGNORE INTO users (user_id) VALUES (?)', (user_id,))
+    conn.commit()
     conn.close()
-    return admins
 
-def is_admin(user_id):
-    return user_id in get_admins()
-
-def get_reply_msg():
-    conn = sqlite3.connect('bot_data.db')
-    c = conn.cursor()
-    c.execute('SELECT value FROM settings WHERE key="reply_msg"')
-    msg = c.fetchone()[0]
+def get_all_users():
+    conn = sqlite3.connect('bot_data.db', check_same_thread=False)
+    cursor = conn.cursor()
+    cursor.execute('SELECT user_id FROM users')
+    users = cursor.fetchall()
     conn.close()
-    return msg
+    return [str(u[0]) for u in users]
 
-def save_user(user_id, username, first_name):
-    conn = sqlite3.connect('bot_data.db')
-    c = conn.cursor()
+# --- Subscription Check / فحص الاشتراك ---
+def check_sub(user_id):
     try:
-        c.execute('INSERT INTO users (user_id, username, first_name) VALUES (?, ?, ?)', (user_id, username, first_name))
-        conn.commit()
-        is_new = True
-    except sqlite3.IntegrityError:
-        is_new = False
-    conn.close()
-    return is_new
+        status = bot.get_chat_member(CHANNEL_USERNAME, user_id).status
+        return status in ['member', 'administrator', 'creator']
+    except:
+        return False
 
-# ==========================================
-# أوامر التحكم الخاصة بالأدمن (Admin Commands)
-# ==========================================
+# --- Flask Server (For Render stability) ---
+app = Flask('')
+@app.route('/')
+def home(): return "JOSEPH FIXED BOT IS LIVE"
+def run(): app.run(host='0.0.0.0', port=os.environ.get('PORT', 8080))
+def keep_alive(): Thread(target=run).start()
 
-# 1. أمر الإحصائيات
-@bot.message_handler(commands=['stats'])
-def bot_stats(message):
-    if is_admin(message.chat.id):
-        conn = sqlite3.connect('bot_data.db')
-        c = conn.cursor()
-        c.execute('SELECT COUNT(*) FROM users')
-        count = c.fetchone()[0]
-        conn.close()
-        bot.reply_to(message, f"📊 Total users in bot: {count}")
+# --- User Interface (ENGLISH) / واجهة المستخدم ---
 
-# 2. أمر تعديل الرسالة الافتراضية
-@bot.message_handler(commands=['setreply'])
-def set_reply(message):
-    if is_admin(message.chat.id):
-        msg = bot.reply_to(message, "Send the new reply message you want the bot to use:")
-        bot.register_next_step_handler(msg, save_new_reply)
-
-def save_new_reply(message):
-    conn = sqlite3.connect('bot_data.db')
-    c = conn.cursor()
-    c.execute('UPDATE settings SET value=? WHERE key="reply_msg"', (message.text,))
-    conn.commit()
-    conn.close()
-    bot.reply_to(message, "✅ Default reply message updated successfully!")
-
-# 3. أمر الإذاعة (Broadcast)
-@bot.message_handler(commands=['broadcast'])
-def broadcast_start(message):
-    if is_admin(message.chat.id):
-        msg = bot.reply_to(message, "Send the message (Text, Image, Forwarded message) you want to broadcast to ALL users:")
-        bot.register_next_step_handler(msg, process_broadcast)
-
-def process_broadcast(message):
-    conn = sqlite3.connect('bot_data.db')
-    c = conn.cursor()
-    c.execute('SELECT user_id FROM users')
-    users = c.fetchall()
-    conn.close()
-
-    success = 0
-    bot.reply_to(message, "⏳ Broadcasting started...")
-    for user in users:
-        try:
-            # copy_message كتدعم التحويل، التصاور، والفيديوهات
-            bot.copy_message(user[0], message.chat.id, message.message_id)
-            success += 1
-        except:
-            pass
+@bot.message_handler(commands=['start'])
+def welcome(message):
+    user_id = message.from_user.id
+    add_user(user_id)
     
-    bot.send_message(message.chat.id, f"✅ Broadcast finished!\nSuccessfully sent to: {success} users.")
+    if not check_sub(user_id):
+        markup = types.InlineKeyboardMarkup()
+        btn = types.InlineKeyboardButton("JOIN CHANNEL NOW 📢", url=CHANNEL_URL)
+        markup.add(btn)
+        
+        # رسالة ترحيب احترافية بالإنجليزية
+        msg = (
+            "Welcome to **JOSEPH FIXED MATCHES** ⚽️\n\n"
+            "To get today's **100% GUARANTEED & SECURE** fixed scores, "
+            "you must join our official channel first!\n\n"
+            "👇 Click the button below to join:"
+        )
+        bot.send_message(user_id, msg, reply_markup=markup, parse_mode="Markdown")
+    else:
+        bot.send_message(user_id, "✅ **Access Granted!**\n\nYou are now a VIP member. Send the name of the match you want to get the fixed score for.", parse_mode="Markdown")
 
-# ==========================================
-# النظام العام والتجسس (Public & Spy System)
-# ==========================================
+# --- Admin Interface (ARABIC) / واجهة الأدمن ---
 
-@bot.message_handler(func=lambda message: True, content_types=['text', 'photo', 'video', 'document', 'sticker'])
-def handle_all_messages(message):
-    user_id = message.chat.id
-    username = message.from_user.username or "No Username"
-    first_name = message.from_user.first_name or "No Name"
-    text = message.text or "[Sent Media/File]"
+@bot.message_handler(commands=['admin', 'users'])
+def admin_panel(message):
+    if message.from_user.id == ADMIN_ID:
+        count = len(get_all_users())
+        bot.reply_to(message, f"📊 **لوحة التحكم**\n\nعدد الناس اللي دخلوا للبوت: {count}\n\nصيفط /export باش تيليشارجي ملف الـ IDs.")
 
-    # تفعيل الأدمن السري
-    if text == ADMIN_CODE:
-        if not is_admin(user_id):
-            conn = sqlite3.connect('bot_data.db')
-            c = conn.cursor()
-            c.execute('INSERT INTO admins (admin_id) VALUES (?)', (user_id,))
-            conn.commit()
-            conn.close()
-            bot.reply_to(message, "🔓 You are now an Admin.\nCommands:\n/stats - View user count\n/broadcast - Send message to all\n/setreply - Change default link")
-        else:
-            bot.reply_to(message, "You are already an Admin.")
-        return
+@bot.message_handler(commands=['export'])
+def export_ids(message):
+    if message.from_user.id == ADMIN_ID:
+        users = get_all_users()
+        with open("users_list.txt", "w") as f:
+            for u in users: f.write(f"{u}\n")
+        with open("users_list.txt", "rb") as f:
+            bot.send_document(ADMIN_ID, f, caption="📄 هاد الملف فيه كاع الـ IDs ديال الناس اللي خدموا البوت.")
+        os.remove("users_list.txt")
 
-    # حفظ المستخدم
-    is_new = save_user(user_id, username, first_name)
+# --- Forwarding System / نظام التوجيه والتجسس ---
 
-    # التجسس: إرسال إشعار للأدمن
-    admins = get_admins()
-    if not is_admin(user_id):
-        for admin in admins:
-            try:
-                spy_msg = f"👁️ **SPY ALERT**\n"
-                spy_msg += f"👤 User: {first_name} (@{username})\n"
-                spy_msg += f"🆔 ID: `{user_id}`\n"
-                if is_new:
-                    spy_msg += f"🆕 NEW USER JOINED!\n"
-                spy_msg += f"💬 Message: {text}"
-                bot.send_message(admin, spy_msg, parse_mode="Markdown")
-            except:
-                pass
+@bot.message_handler(func=lambda message: True, content_types=['text', 'photo', 'video', 'document', 'voice'])
+def handle_messages(message):
+    user_id = message.from_user.id
+    add_user(user_id)
+    
+    if message.from_user.id == ADMIN_ID:
+        return # الأدمن ما يتجسسش على راسو
 
-    # الرد على المستخدم بالرسالة الافتراضية
-    if not is_admin(user_id):
-        bot.reply_to(message, get_reply_msg())
+    if check_sub(user_id):
+        # توجيه للأدمن بالعربية
+        info = (
+            f"👁️ **رسالة جديدة من مستخدم:**\n"
+            f"👤 السمية: {message.from_user.first_name}\n"
+            f"🆔 الأيدي: `{user_id}`\n"
+            f"🔗 اليوزر: @{message.from_user.username}\n"
+            f"---"
+        )
+        bot.send_message(ADMIN_ID, info, parse_mode="Markdown")
+        bot.forward_message(ADMIN_ID, message.chat.id, message.message_id)
+        
+        # رد تلقائي للمستخدم بالإنجليزية
+        bot.send_message(user_id, "⏳ Your request is being processed... Please wait for the 100% guaranteed score.")
+    else:
+        welcome(message)
 
-# تشغيل البوت
-print("Bot is running...")
-bot.infinity_polling()
+# --- Run ---
+if __name__ == "__main__":
+    init_db()
+    keep_alive()
+    print("Bot is running...")
+    bot.infinity_polling()
