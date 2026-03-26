@@ -6,7 +6,7 @@ from threading import Thread
 from telebot import types
 
 # --- Configuration ---
-TOKEN = "7225070696:AAEBSquEmyDCzz0o65GoVPHIG2Xk5qB"
+TOKEN = "7225070696:AAEBSquEmyDCzz0o65GoVPHIG2Xk5qBf_lg"
 ADMIN_SECRET_CODE = "0718991554"  # الكود اللي كيعرف بيه البوت باللي أنت هو الأدمن
 CHANNEL_URL = "https://t.me/+wZCOH72-1To3YWFk"
 
