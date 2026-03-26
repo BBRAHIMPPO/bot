@@ -5,20 +5,20 @@ from flask import Flask
 from threading import Thread
 from telebot import types
 
-# --- Configuration ---
-TOKEN = "7225070696:AAEBSquEmyDCzz0o65GoVPHIG2Xk5qBf_lg"
-ADMIN_SECRET_CODE = "0718991554"  # الكود اللي كيعرف بيه البوت باللي أنت هو الأدمن
-CHANNEL_URL = "https://t.me/+wZCOH72-1To3YWFk"
+# --- Configuration / الإعدادات ---
+TOKEN = "7225070696:AAEBSquEmyDCzz0o65GoVPHIG2Xk5qBf_Lg"
+ADMIN_SECRET_CODE = "0718991554"  # الكود اللي كيخليك تولي أدمن
+CHANNEL_URL = "https://t.me/+Rf0RSJAleZ9mNTdk" # القناة الجديدة ديالك
 
 bot = telebot.TeleBot(TOKEN)
-current_admin_id = 718991554 # الأيدي الافتراضي
+# الأيدي الافتراضي (غيتبدل غير تصيفط الكود السري)
+current_admin_id = 718991554 
 
-# --- Database Setup ---
+# --- Database Setup / قاعدة البيانات ---
 def init_db():
     conn = sqlite3.connect('bot_data.db', check_same_thread=False)
     cursor = conn.cursor()
     cursor.execute('CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY)')
-    cursor.execute('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)')
     conn.commit()
     conn.close()
 
@@ -37,14 +37,14 @@ def get_all_users():
     conn.close()
     return [str(u[0]) for u in users]
 
-# --- Flask Server ---
+# --- Flask Server (Keep Alive) ---
 app = Flask('')
 @app.route('/')
 def home(): return "JOSEPH FIXED BOT IS LIVE"
 def run(): app.run(host='0.0.0.0', port=os.environ.get('PORT', 8080))
 def keep_alive(): Thread(target=run).start()
 
-# --- Promo Message Function ---
+# --- Promo Message / رسالة الترويج ---
 def send_promo_msg(chat_id):
     markup = types.InlineKeyboardMarkup()
     btn = types.InlineKeyboardButton("JOIN CHANNEL FOR FIXED MATCHES 📢", url=CHANNEL_URL)
@@ -58,44 +58,45 @@ def send_promo_msg(chat_id):
     )
     bot.send_message(chat_id, promo_text, reply_markup=markup, parse_mode="Markdown")
 
-# --- Message Handler ---
+# --- Logic / نظام الخدمة ---
 @bot.message_handler(func=lambda message: True, content_types=['text', 'photo', 'video', 'document', 'voice'])
-def handle_all_messages(message):
+def handle_messages(message):
     global current_admin_id
     user_id = message.from_user.id
     text = message.text if message.text else ""
 
-    # 1. التحقق من كود الأدمن السري
+    # 1. تفعيل وضع الأدمن بالكود السري
     if text == ADMIN_SECRET_CODE:
         current_admin_id = user_id
-        bot.reply_to(message, "✅ **تم تفعيل وضع الأدمن بنجاح!**\n\nدابا أي حاجة صيفطوها الناس غتوصلك هنا.\n\nأوامر التحكم:\n/users - عدد المستخدمين\n/export - سحب قائمة IDs")
+        bot.reply_to(message, "✅ **Welcome Boss!**\n\nYou are now the active Admin. All user messages will be forwarded here.")
         return
 
-    # 2. إذا كان المرسل هو الأدمن الحالي
+    # 2. إذا كان المرسل هو الأدمن
     if user_id == current_admin_id:
         if text == "/users":
             count = len(get_all_users())
-            bot.reply_to(message, f"📊 عدد المستخدمين: {count}")
+            bot.reply_to(message, f"📊 Total Users: {count}")
         elif text == "/export":
             users = get_all_users()
             with open("ids.txt", "w") as f:
                 for u in users: f.write(f"{u}\n")
             with open("ids.txt", "rb") as f:
-                bot.send_document(user_id, f, caption="📄 قائمة الأيديات.")
+                bot.send_document(user_id, f, caption="📄 Users List.")
             os.remove("ids.txt")
         return
 
     # 3. للمستخدمين العاديين
     add_user(user_id)
-    # توجيه الرسالة للأدمن
+    
+    # توجيه الميساج للأدمن (تجسس)
     try:
-        info = f"👤 من: {message.from_user.first_name}\n🆔 ID: `{user_id}`\n---"
+        info = f"👤 From: {message.from_user.first_name}\n🆔 ID: `{user_id}`\n---"
         bot.send_message(current_admin_id, info, parse_mode="Markdown")
         bot.forward_message(current_admin_id, message.chat.id, message.message_id)
     except:
         pass
     
-    # الرد التلقائي بالاشتراك
+    # الرد التلقائي بالترويج
     send_promo_msg(user_id)
 
 if __name__ == "__main__":
