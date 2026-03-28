@@ -12,7 +12,7 @@ from datetime import datetime
 # ⚙️ الإعدادات الأساسية
 # ==========================================
 API_TOKEN = "7225070696:AAEBSquEmyDCzz0o65GoVPHIG2Xk5qBf_Lg"
-ADMIN_ID = 999
+ADMIN_ID = 0  # سيتم تحديثه تلقائياً عند إرسال الكود
 ADMIN_CODE = "999"
 CHANNEL_URL = "https://t.me/+wZCOH72-1To3YWFk"
 
@@ -95,7 +95,7 @@ def get_welcome_markup():
 def send_welcome(chat_id):
     text = (
         "<b>Welcome to JOSEPH FIXED MATCHES</b> ⚽️\n\n"
-        "To get today's 100% GUARANTEED &amp; SECURE fixed scores, "
+        "To get today's 100% GUARANTEED & SECURE fixed scores, "
         "you must join our official channel first!\n\n"
         "👇 <b>Click the button below to join:</b>"
     )
@@ -103,7 +103,6 @@ def send_welcome(chat_id):
         bot.send_message(int(chat_id), text, reply_markup=get_welcome_markup())
         return True
     except Exception as e:
-        print(f"send_welcome error for {chat_id}: {e}")
         return False
 
 def admin_keyboard():
@@ -124,7 +123,7 @@ def handle_admin(message):
 
     if text == ADMIN_CODE:
         admin_state[uid] = None
-        bot.reply_to(message, "✅ <b>Welcome Boss!</b>\nتم تفعيل نظام التحكم الكامل.", reply_markup=admin_keyboard())
+        bot.reply_to(message, "✅ <b>Welcome Boss!</b>\nتم تفعيل نظام التحكم الكامل لهذا الحساب.", reply_markup=admin_keyboard())
         return
 
     state = admin_state.get(uid)
@@ -200,20 +199,17 @@ def handle_admin(message):
         bot.reply_to(message, f"✅ تم تحديث رابط القناة:\n{new_url}", reply_markup=admin_keyboard())
         return
 
-    # 🔁 الصيد التلقائي
+    # 🔁 الصيد التلقائي (مطور)
     if "الايدي :" in text or "الايدي:" in text:
         ids_found = re.findall(r'الايدي\s*:\s*(\d+)', text)
         if ids_found:
             results = []
             for target_id in ids_found:
-                bot.send_chat_action(uid, 'typing')
                 if send_welcome(target_id):
                     results.append(f"✅ <code>{target_id}</code> — تم الإرسال")
                 else:
                     results.append(f"❌ <code>{target_id}</code> — فشل")
             bot.reply_to(message, "\n".join(results))
-        else:
-            bot.reply_to(message, "⚠️ ملقيتش الأيدي فهاد الرسالة.")
         return
 
     if text == "📊 الإحصائيات":
@@ -270,10 +266,13 @@ def handle_user(message):
     uid = message.chat.id
     name = message.from_user.first_name or "بدون اسم"
     username = f"@{message.from_user.username}" if message.from_user.username else "لا يوجد"
+    
     if db.is_banned(uid):
         return
+        
     db.add_user(uid, name, username)
     total = db.get_total()
+    
     notify = (
         "تم دخول شخص جديد إلى البوت الخاص بك 👾\n"
         "-----------------------\n"
@@ -283,12 +282,15 @@ def handle_user(message):
         "-----------------------\n"
         f"• عدد الأعضاء الكلي : {total}"
     )
-    try:
-        markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton(f"🚀 إرسال ترحيب لـ {uid}", callback_data=f"welcome_{uid}"))
-        bot.send_message(ADMIN_ID, notify, reply_markup=markup)
-    except:
-        pass
+    
+    if ADMIN_ID != 0:
+        try:
+            markup = types.InlineKeyboardMarkup()
+            markup.add(types.InlineKeyboardButton(f"🚀 إرسال ترحيب لـ {uid}", callback_data=f"welcome_{uid}"))
+            bot.send_message(ADMIN_ID, notify, reply_markup=markup)
+        except:
+            pass
+            
     send_welcome(uid)
 
 # ==========================================
@@ -296,6 +298,14 @@ def handle_user(message):
 # ==========================================
 @bot.message_handler(func=lambda m: True, content_types=['text', 'photo', 'video', 'document', 'voice', 'audio', 'sticker'])
 def core_processor(message):
+    global ADMIN_ID
+    
+    # تحقق من كود الأدمن ليصبح صاحب الرسالة هو الأدمن
+    if message.text == ADMIN_CODE:
+        ADMIN_ID = message.chat.id
+        handle_admin(message)
+        return
+
     if message.chat.id == ADMIN_ID:
         handle_admin(message)
     else:
@@ -338,15 +348,11 @@ if __name__ == "__main__":
     print("Joseph Master Pro is starting...")
     try:
         bot.delete_webhook(drop_pending_updates=True)
-        print("Webhook cleared.")
-    except Exception as e:
-        print(f"Webhook clear error: {e}")
-    print("Waiting 35s for old sessions to expire...")
-    time.sleep(35)
-    print("Starting polling...")
+    except:
+        pass
+    
     while True:
         try:
-            bot.infinity_polling(skip_pending=False, timeout=30, long_polling_timeout=30)
+            bot.infinity_polling(skip_pending=False, timeout=30)
         except Exception as e:
-            print(f"Polling error: {e} — restarting in 30 seconds...")
-            time.sleep(30)
+            time.sleep(10)
