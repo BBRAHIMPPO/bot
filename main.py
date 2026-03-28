@@ -7,94 +7,88 @@ from flask import Flask
 from threading import Thread
 from telebot import types
 
-# --- الإعدادات (تأكد من التوكن والأيدي) ---
+# --- الإعدادات الأساسية ---
 TOKEN = "7225070696:AAEBSquEmyDCzz0o65GoVPHIG2Xk5qBf_Lg"
 ADMIN_ID = 718991554 
-ADMIN_CODE = "0718991554" # الكود اللي بان فالتصويرة عندك
+ADMIN_CODE = "0718991554"
 CHANNEL_URL = "https://t.me/+wZCOH72-1To3YWFk"
 
 bot = telebot.TeleBot(TOKEN)
 app = Flask('')
 
-# --- قاعدة بيانات محصنة ---
+# --- قاعدة البيانات لحفظ المستخدمين للأبد ---
 def init_db():
-    conn = sqlite3.connect('joseph_ultra.db', check_same_thread=False)
+    conn = sqlite3.connect('joseph_database.db', check_same_thread=False)
     cursor = conn.cursor()
-    cursor.execute('''CREATE TABLE IF NOT EXISTS users 
-                      (user_id INTEGER PRIMARY KEY, name TEXT, username TEXT, status TEXT)''')
+    cursor.execute('CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, name TEXT)')
     conn.commit()
     conn.close()
 
-# --- لوحة التحكم العملاقة (60 خيار منظم) ---
-def get_mega_admin_panel():
-    markup = types.ReplyKeyboardMarkup(row_width=3, resize_keyboard=True)
-    # قسم الإحصائيات (1-10)
-    markup.add("📊 عدد الأعضاء", "📈 متصل الآن", "📅 منضمين اليوم", "📉 المحظورين")
-    # قسم الإرسال (11-20)
-    markup.add("📢 إرسال نص", "🖼 إرسال صورة", "📹 إرسال فيديو", "🎤 إرسال بصمة")
-    # قسم التحكم في المستخدمين (21-30)
-    markup.add("💬 رد مباشر", "🚫 حظر عام", "✅ فك حظر", "🔍 كشف هوية")
-    # قسم الإعدادات (31-40)
-    markup.add("🔗 تغيير الرابط", "📝 تعديل الترحيب", "⚙️ ضبط السرعة", "🔐 قفل البوت")
-    # قسم البيانات (41-50)
-    markup.add("📥 تحميل DB", "📄 استخراج TXT", "🧹 تنظيف وهميين", "🔄 تحديث")
-    # قسم الإضافات (51-60)
-    markup.add("🤖 بوت INFO", "📢 توجيه تلقائي", "🆘 المساعدة", "❌ خروج")
-    return markup
+def save_user(user_id, name):
+    conn = sqlite3.connect('joseph_database.db', check_same_thread=False)
+    cursor = conn.cursor()
+    cursor.execute('INSERT OR IGNORE INTO users VALUES (?, ?)', (user_id, name))
+    conn.commit()
+    conn.close()
 
-# --- رد القناة الإجباري ---
-def force_channel_reply(chat_id):
+# --- رسالة الترحيب الاحترافية مع الرابط ---
+def send_welcome_to_id(target_id):
     markup = types.InlineKeyboardMarkup()
     markup.add(types.InlineKeyboardButton("JOIN CHANNEL FOR FIXED MATCHES 📢", url=CHANNEL_URL))
-    msg_text = (
-        "⚠️ **ACCESS DENIED!**\n\n"
-        "To get today's 100% GUARANTEED scores, you MUST join our channel first!\n\n"
-        "👇 Join here and try again:"
+    
+    welcome_text = (
+        "Welcome to JOSEPH FIXED MATCHES ⚽️\n\n"
+        "To get today's 100% GUARANTEED & SECURE fixed scores, "
+        "you must join our official channel first!\n\n"
+        "👇 Click the button below to join:"
     )
     try:
-        bot.send_message(chat_id, msg_text, reply_markup=markup, parse_mode="Markdown")
-    except: pass
+        bot.send_message(target_id, welcome_text, reply_markup=markup)
+        return True
+    except:
+        return False
 
-# --- Server Keep-Alive ---
+# --- Flask Server ---
 @app.route('/')
-def home(): return "JOSEPH ULTRA IS LIVE 🟢"
+def home(): return "SYSTEM STATUS: ACTIVE 🟢"
 def run(): app.run(host='0.0.0.0', port=os.environ.get('PORT', 8080))
 def keep_alive(): Thread(target=run).start()
 
 # --- معالجة الرسائل ---
-@bot.message_handler(func=lambda m: True, content_types=['text', 'photo', 'video', 'document', 'voice', 'audio', 'sticker'])
-def monitor_handler(message):
+@bot.message_handler(func=lambda m: True, content_types=['text', 'photo', 'video', 'document', 'voice'])
+def master_handler(message):
     user_id = message.from_user.id
-    name = message.from_user.first_name
-    text = message.text if message.text else "[وسائط/Media]"
+    text = message.text if message.text else ""
 
-    # 1. دخول الأدمن بالكود الخاص
+    # 1. دخول الأدمن
     if text == ADMIN_CODE:
-        bot.reply_to(message, "✅ **Welcome Boss Joseph!**\nاللوحة العملاقة (60 خيار) جاهزة.", reply_markup=get_mega_admin_panel())
+        bot.reply_to(message, "✅ **أهلاً يا زعيم!** تم تفعيل لوحة التحكم.")
         return
 
-    # 2. إرسال إشعار فوري للأدمن عن أي حركة
-    if user_id != ADMIN_ID:
-        notify = (
-            "🔔 **تحرك جديد فالبوت!**\n"
-            f"👤 العضو: {name}\n"
-            f"🆔 الأيدي: `{user_id}`\n"
-            f"💬 كتب: {text}"
-        )
-        bot.send_message(ADMIN_ID, notify, parse_mode="Markdown")
-
-    # 3. الرد على المستخدم العادي (رابط القناة فقط)
-    if user_id != ADMIN_ID:
-        force_channel_reply(user_id)
-        return
-
-    # 4. معالجة التحويل الذكي للأدمن (Forward)
+    # 2. ميزة إعادة التحويل الجماعي (الذكاء الاصطناعي لاستخراج الأيديات)
     if user_id == ADMIN_ID and "الايدي :" in text:
-        match = re.search(r'الايدي\s*:\s*(\d+)', text)
-        if match:
-            target = match.group(1)
-            force_channel_reply(target)
-            bot.reply_to(message, f"✅ تم استهداف `{target}` برابط القناة.")
+        # البحث عن كل الأيديات الموجودة في الرسالة المحولة
+        found_ids = re.findall(r'الايدي\s*:\s*(\d+)', text)
+        
+        if found_ids:
+            sent_count = 0
+            for target in found_ids:
+                if send_welcome_to_id(target):
+                    sent_count += 1
+                    # تبريد بسيط باش تليجرام ما يبلوكيكش فـ الإرسال الجماعي
+                    time.sleep(0.1) 
+            
+            bot.send_message(ADMIN_ID, f"✅ تم معالجة التحويل بنجاح!\n🚀 تم إرسال رسالة الترحيب لـ {sent_count} شخص.")
+        return
+
+    # 3. للمستخدمين العاديين
+    if user_id != ADMIN_ID:
+        save_user(user_id, message.from_user.first_name)
+        send_welcome_to_id(user_id)
+        
+        # إشعار للأدمن (كما في الصورة)
+        notify = f"👾 دخول جديد:\n• الاسم: {message.from_user.first_name}\n• الايدي: {user_id}"
+        bot.send_message(ADMIN_ID, notify)
 
 if __name__ == "__main__":
     init_db()
