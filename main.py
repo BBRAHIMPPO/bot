@@ -2,7 +2,7 @@ import telebot
 import sqlite3
 import os
 import time
-import re # مكتبة البحث عن الأرقام ف النص
+import re
 from flask import Flask
 from threading import Thread
 from telebot import types
@@ -16,98 +16,82 @@ CHANNEL_URL = "https://t.me/+wZCOH72-1To3YWFk"
 bot = telebot.TeleBot(TOKEN)
 app = Flask('')
 
-# --- قاعدة البيانات ---
+# --- نظام حفظ الداتا (SQLite) ---
 def init_db():
-    conn = sqlite3.connect('joseph_shadow.db', check_same_thread=False)
+    conn = sqlite3.connect('joseph_data.db', check_same_thread=False)
     cursor = conn.cursor()
     cursor.execute('CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, name TEXT)')
     conn.commit()
     conn.close()
 
-def get_all_ids():
-    conn = sqlite3.connect('joseph_shadow.db', check_same_thread=False)
+def save_user(user_id, name):
+    conn = sqlite3.connect('joseph_data.db', check_same_thread=False)
+    cursor = conn.cursor()
+    cursor.execute('INSERT OR IGNORE INTO users (user_id, name) VALUES (?, ?)', (user_id, name))
+    conn.commit()
+    conn.close()
+
+def get_all_users():
+    conn = sqlite3.connect('joseph_data.db', check_same_thread=False)
     cursor = conn.cursor()
     cursor.execute('SELECT user_id FROM users')
     ids = [r[0] for r in cursor.fetchall()]
     conn.close()
     return ids
 
-# --- الأزرار ---
-def admin_menu():
-    markup = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
-    markup.add("📊 الإحصائيات", "📢 إرسال للكل (1000+)", "📥 نسخة احتياطية")
-    return markup
-
 # --- رسالة الترحيب الاحترافية ---
-def send_welcome_to_user(target_id):
+def send_welcome(target_id):
     markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton("JOIN CHANNEL FOR FIXED MATCHES 📢", url=CHANNEL_URL))
+    btn = types.InlineKeyboardButton("JOIN CHANNEL FOR FIXED MATCHES 📢", url=CHANNEL_URL)
+    markup.add(btn)
+    
     welcome_text = (
-        "Welcome to **JOSEPH FIXED MATCHES** ⚽️\n\n"
-        "To get today's **100% GUARANTEED** scores, "
-        "join our official channel now!"
+        "Welcome to JOSEPH FIXED MATCHES ⚽️\n\n"
+        "To get today's 100% GUARANTEED & SECURE fixed scores, "
+        "you must join our official channel first!\n\n"
+        "👇 Click the button below to join:"
     )
     try:
-        bot.send_message(target_id, welcome_text, reply_markup=markup, parse_mode="Markdown")
+        bot.send_message(target_id, welcome_text, reply_markup=markup)
         return True
-    except: return False
+    except:
+        return False
 
-# --- السيرفر ---
+# --- Server Keep-Alive ---
 @app.route('/')
-def home(): return "JOSEPH SYSTEM: ACTIVE"
+def home(): return "JOSEPH SYSTEM IS LIVE 🟢"
 def run(): app.run(host='0.0.0.0', port=os.environ.get('PORT', 8080))
 def keep_alive(): Thread(target=run).start()
 
 # --- معالجة الرسائل ---
-
-@bot.message_handler(func=lambda m: True, content_types=['text', 'photo', 'video', 'document'])
-def master_handler(message):
+@bot.message_handler(func=lambda m: True, content_types=['text', 'photo', 'video', 'document', 'voice'])
+def handle_all(message):
     user_id = message.from_user.id
     text = message.text if message.text else ""
 
     # 1. تفعيل الأدمن
     if text == ADMIN_SECRET_CODE:
-        bot.reply_to(message, "✅ وضع التحكم الكامل مفعل.", reply_markup=admin_menu())
+        bot.reply_to(message, "✅ **Welcome Boss!**\nوضع التحكم الكامل مفعل.", reply_markup=types.ReplyKeyboardMarkup(resize_keyboard=True).add("📊 الإحصائيات", "📢 إرسال للكل"))
         return
 
-    # 2. ميزة "التحويل الذكي" (Smart Forward)
-    # إذا حولتي للبوت ميساج فيه "الايدي : "
+    # 2. ميزة إعادة الاستهداف (التحويل الذكي)
     if user_id == ADMIN_ID and "الايدي :" in text:
-        # البحث عن رقم الأيدي وسط النص باستعمال Regex
-        match = re.search(r'الايدي\s*:\s*(\d+)', text)
-        if match:
-            target_user_id = match.group(1)
-            if send_welcome_to_user(target_user_id):
-                bot.reply_to(message, f"✅ تم إرسال رسالة الترحيب بنجاح لـ `{target_user_id}`")
+        # البحث عن رقم الأيدي من النص المحول (مثلا: الايدي : 6124430879)
+        found_id = re.search(r'الايدي\s*:\s*(\d+)', text)
+        if found_id:
+            target_id = found_id.group(1)
+            if send_welcome(target_id):
+                bot.reply_to(message, f"✅ تم إعادة استهداف العضو `{target_id}` بنجاح!")
             else:
-                bot.reply_to(message, "❌ فشل الإرسال (غالباً الشخص بلوكا البوت)")
+                bot.reply_to(message, f"❌ فشل الإرسال لـ `{target_id}` (ممكن بلوكا البوت).")
         return
 
-    # 3. أوامر الأدمن العادية
-    if user_id == ADMIN_ID:
-        if text == "📢 إرسال للكل (1000+)":
-            m = bot.reply_to(message, "صيفط دبا الميساج اللي بغيتي تفرقو على كاع الناس:")
-            bot.register_next_step_handler(m, broadcast_to_1000)
-            return
-        elif text == "📊 الإحصائيات":
-            bot.reply_to(message, f"📈 عدد الأعضاء: {len(get_all_ids())}")
-            return
-
-    # 4. للمستخدمين العاديين
-    # (هنا كيدير البوت الخدمة العادية ديالو فـ الخفاء)
-    send_welcome_to_user(user_id)
-
-def broadcast_to_1000(message):
-    ids = get_all_ids()
-    sent = 0
-    bot.send_message(ADMIN_ID, f"🚀 جاري الإرسال لـ {len(ids)} شخص...")
-    for uid in ids:
-        try:
-            bot.copy_message(uid, message.chat.id, message.message_id)
-            sent += 1
-            if sent % 30 == 0: time.sleep(1) # تبريد باش ما يتبلوكاش البوت
-        except: pass
-    bot.send_message(ADMIN_ID, f"✅ المهمة تمت! وصل لـ {sent} واحد.")
+    # 3. حفظ أي واحد دخل جديد
+    save_user(user_id, message.from_user.first_name)
+    
+    # 4. رد تلقائي للمستخدمين
+    if text == "/start":
+        send_welcome(user_id)
 
 if __name__ == "__main__":
     init_db()
