@@ -22,7 +22,7 @@ app = Flask('')
 admin_state = {}
 
 # ==========================================
-# 📊 قاعدة البيانات (ممنوع الحذف نهائياً)
+# 📊 قاعدة البيانات (ثابتة لا تتغير)
 # ==========================================
 class Database:
     def __init__(self, db_name="joseph_master_pro.db"):
@@ -54,19 +54,8 @@ class Database:
     def get_total(self):
         return self.conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
 
-    def get_all_users(self):
-        return self.conn.execute("SELECT user_id, name, username, date FROM users").fetchall()
-
     def get_all_ids(self):
         return [r[0] for r in self.conn.execute("SELECT user_id FROM users").fetchall()]
-
-    def ban_user(self, uid):
-        self.conn.execute("INSERT OR IGNORE INTO banned VALUES (?)", (uid,))
-        self.conn.commit()
-
-    def unban_user(self, uid):
-        self.conn.execute("DELETE FROM banned WHERE user_id=?", (uid,))
-        self.conn.commit()
 
     def is_banned(self, uid):
         return self.conn.execute("SELECT 1 FROM banned WHERE user_id=?", (uid,)).fetchone() is not None
@@ -75,25 +64,19 @@ class Database:
         r = self.conn.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
         return r[0] if r else None
 
-    def set_setting(self, key, value):
-        self.conn.execute("INSERT OR REPLACE INTO settings VALUES (?, ?)", (key, value))
-        self.conn.commit()
-
 db = Database()
 
 # ==========================================
-# 🛠️ دوال المساعدة
+# 🛠️ دالة الترحيب (معدلة لمنع إزعاج الأدمن)
 # ==========================================
-def get_channel_url():
-    return db.get_setting('channel_url') or CHANNEL_URL
-
 def get_welcome_markup():
     markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton("JOIN CHANNEL FOR FIXED MATCHES 📢", url=get_channel_url()))
+    url = db.get_setting('channel_url') or CHANNEL_URL
+    markup.add(types.InlineKeyboardButton("JOIN CHANNEL FOR FIXED MATCHES 📢", url=url))
     return markup
 
 def send_welcome(chat_id):
-    # إيقاف الترحيب للأدمن بشكل نهائي
+    # لا نرسل ترحيب للأدمن أبداً
     if int(chat_id) == ADMIN_ID:
         return False
         
@@ -110,7 +93,7 @@ def send_welcome(chat_id):
         return False
 
 # ==========================================
-# 🕹️ بانيل الأدمن (20 وظيفة)
+# 🕹️ لوحة تحكم الأدمن (البانيل الكاملة)
 # ==========================================
 def admin_keyboard():
     markup = types.ReplyKeyboardMarkup(row_width=3, resize_keyboard=True)
@@ -124,81 +107,63 @@ def admin_keyboard():
     return markup
 
 # ==========================================
-# 🤖 معالجة أوامر الأدمن
+# 🤖 معالجة أوامر الأدمن + استخراج الأيدي
 # ==========================================
 def handle_admin(message):
-    global admin_state, ADMIN_ID
+    global ADMIN_ID
     uid = message.chat.id
     text = message.text if message.text else ""
 
-    # أداة استخراج الأيدي من رسائل الدخول
-    if "الايدي :" in text or "الايدي:" in text:
-        ids = re.findall(r'الايدي\s*:\s*(\d+)', text)
+    # خاصية الاستخراج: ابحث عن أي رقم أيدي داخل الرسالة وأرسل له ترحيب
+    if "الايدي :" in text or "الايدي:" in text or "ID:" in text:
+        ids = re.findall(r'(\d{7,15})', text) # يستخرج أي رقم طويل يشبه الأيدي
         if ids:
             for target in ids:
-                # إرسال الترحيب للمستخدم المستخرج فقط
-                if send_welcome_to_user_only(target):
-                    bot.send_message(uid, f"✅ تم استخراج الأيدي <code>{target}</code> وإرسال الترحيب.")
+                if int(target) == ADMIN_ID: continue
+                if send_welcome(target):
+                    bot.send_message(uid, f"✅ تم إرسال الترحيب للأيدي: <code>{target}</code>")
                 else:
-                    bot.send_message(uid, f"❌ فشل الإرسال للأيدي <code>{target}</code>.")
+                    bot.send_message(uid, f"❌ فشل الإرسال للأيدي: <code>{target}</code>")
         return
 
-    # تنفيذ الأوامر
+    # أوامر البانيل
     if text == "📊 الإحصائيات":
-        bot.reply_to(message, f"📈 إجمالي المشتركين: {db.get_total()}")
+        bot.reply_to(message, f"📈 المشتركين: {db.get_total()}")
     elif text == "🔐 إغلاق اللوحة":
-        bot.reply_to(message, "تم إغلاق اللوحة.", reply_markup=types.ReplyKeyboardRemove())
-
-def send_welcome_to_user_only(chat_id):
-    """دالة خاصة للاستخراج تضمن عدم مراسلة الأدمن بالخطأ"""
-    if int(chat_id) == ADMIN_ID: return False
-    text = (
-        "<b>Welcome to JOSEPH FIXED MATCHES</b> ⚽️\n\n"
-        "To get today's 100% GUARANTEED & SECURE fixed scores, "
-        "you must join our official channel first!\n\n"
-        "👇 <b>Click the button below to join:</b>"
-    )
-    try:
-        bot.send_message(int(chat_id), text, reply_markup=get_welcome_markup())
-        return True
-    except: return False
+        bot.reply_to(message, "🔐 تم الحفظ وإغلاق اللوحة.", reply_markup=types.ReplyKeyboardRemove())
 
 # ==========================================
-# 📩 المحرك الرئيسي (Core)
+# 📩 المحرك الرئيسي (معدل لحل مشكلة Render)
 # ==========================================
 @bot.message_handler(func=lambda m: True, content_types=['text', 'photo', 'video', 'document', 'audio', 'voice'])
 def core_processor(message):
     global ADMIN_ID
     
-    # 1. إذا أرسل المستخدم كود الأدمن (لا يرسل له ترحيب أبداً)
+    # 1. تفعيل الأدمن ومنع الترحيب عنه
     if message.text == ADMIN_CODE:
         ADMIN_ID = message.chat.id
-        bot.reply_to(message, "✅ تم تسجيل دخولك كمدير. لن تزعجك رسائل الترحيب من الآن فصاعداً.", reply_markup=admin_keyboard())
+        bot.reply_to(message, "✅ أهلاً بك يا زعيم. لوحة التحكم نشطة الآن.", reply_markup=admin_keyboard())
         return
 
-    # 2. إذا كان الشخص هو الأدمن المسجل
+    # 2. إذا كان أدمن: عالج أوامر البانيل والاستخراج
     if message.chat.id == ADMIN_ID:
         handle_admin(message)
-        # ملاحظة: تم إزالة استدعاء send_welcome هنا لضمان عدم إزعاج الأدمن
         return
 
-    # 3. إذا كان مستخدماً عادياً
+    # 3. إذا كان مستخدم عادي: سجل بياناته، أرسل ترحيب، أرسل إشعار للأدمن
     else:
         uid = message.chat.id
         if db.is_banned(uid): return
         
-        # حفظ بيانات المستخدم
-        name = message.from_user.first_name or "User"
-        user_name = f"@{message.from_user.username}" if message.from_user.username else "لا يوجد"
-        db.add_user(uid, name, user_name)
+        db.add_user(uid, message.from_user.first_name, f"@{message.from_user.username}")
         
-        # إشعار للأدمن
+        # إشعار للأدمن (الصيغة المطلوبة)
         notify = (
             "تم دخول شخص جديد إلى البوت الخاص بك 👾\n"
             "-----------------------\n"
             "• معلومات العضو الجديد .\n\n"
-            f"• الاسم : {name}\n"
-            f"• معرف : {user_name}\n"
+            f"• الاسم : {message.from_user.first_name}\n"
+            f"• معرف : @{message.from_user.username}\n"
             f"• الايدي : {uid}\n"
             "-----------------------\n"
             f"• عدد الأعضاء الكلي : {db.get_total()}"
@@ -206,17 +171,29 @@ def core_processor(message):
         if ADMIN_ID != 0:
             bot.send_message(ADMIN_ID, notify)
             
-        # إرسال الترحيب للمستخدم العادي فقط
         send_welcome(uid)
 
 # ==========================================
-# 🌐 تشغيل
+# 🌐 نظام الـ Web وشيفرة استقرار Render
 # ==========================================
 @app.route('/')
-def home(): return "JOSEPH SYSTEM ACTIVE"
+def home(): return "SYSTEM ACTIVE"
 
 def run_web(): app.run(host='0.0.0.0', port=8080)
 
 if __name__ == "__main__":
     Thread(target=run_web).start()
-    bot.infinity_polling(timeout=60)
+    
+    # حل مشكلة Conflict (Error 409)
+    try:
+        bot.remove_webhook()
+        time.sleep(2)
+    except:
+        pass
+
+    print("Joseph Master Pro is running...")
+    while True:
+        try:
+            bot.infinity_polling(timeout=60, long_polling_timeout=5)
+        except Exception as e:
+            time.sleep(10) # انتظار في حال حدوث خطأ في الشبكة
