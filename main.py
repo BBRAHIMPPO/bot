@@ -4,102 +4,62 @@ import os
 import time
 import re
 import logging
-import requests
 from flask import Flask
 from threading import Thread
 from telebot import types
 from datetime import datetime
 
 # ==========================================
-# ⚙️ الإعدادات الأساسية (إياك أن تغير الأسماء)
+# ⚙️ الإعدادات الأساسية
 # ==========================================
 API_TOKEN = "7225070696:AAEBSquEmyDCzz0o65GoVPHIG2Xk5qBf_Lg"
-ADMIN_ID = 718991554  #
-ADMIN_CODE = "0718991554" 
-DEFAULT_CHANNEL = "https://t.me/+wZCOH72-1To3YWFk" #
+ADMIN_ID = 718991554  # أيدي الأدمن الخاص بك
+ADMIN_CODE = "0718991554" # كود الدخول للوحة
+CHANNEL_URL = "https://t.me/+wZCOH72-1To3YWFk" # رابط القناة
 
-# إعدادات اللوج (لتتبع الأخطاء)
-logging.basicConfig(level=logging.INFO)
 bot = telebot.TeleBot(API_TOKEN, parse_mode="HTML")
 app = Flask('')
 
 # ==========================================
-# 📊 نظام قاعدة البيانات (SQLite3)
+# 📊 نظام قاعدة البيانات المتطور
 # ==========================================
 class Database:
-    def __init__(self, db_name="joseph_system.db"):
+    def __init__(self, db_name="joseph_master.db"):
         self.conn = sqlite3.connect(db_name, check_same_thread=False)
         self.create_tables()
 
     def create_tables(self):
         cursor = self.conn.cursor()
-        # جدول المستخدمين
         cursor.execute('''CREATE TABLE IF NOT EXISTS users 
-                          (user_id INTEGER PRIMARY KEY, 
-                           name TEXT, 
-                           username TEXT, 
-                           date_joined TEXT, 
-                           is_banned INTEGER DEFAULT 0)''')
-        # جدول الإعدادات الديناميكية
-        cursor.execute('''CREATE TABLE IF NOT EXISTS settings 
-                          (key TEXT PRIMARY KEY, value TEXT)''')
-        # تعيين الرابط الافتراضي إذا لم يوجد
-        cursor.execute("INSERT OR IGNORE INTO settings VALUES ('channel_url', ?)", (DEFAULT_CHANNEL,))
+                          (user_id INTEGER PRIMARY KEY, name TEXT, username TEXT, join_date TEXT)''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)''')
+        cursor.execute("INSERT OR IGNORE INTO settings VALUES ('channel_link', ?)", (CHANNEL_URL,))
         self.conn.commit()
 
-    def add_user(self, uid, name, username):
+    def add_user(self, uid, name, user):
         cursor = self.conn.cursor()
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        cursor.execute("INSERT OR IGNORE INTO users (user_id, name, username, date_joined) VALUES (?, ?, ?, ?)", 
-                       (uid, name, username, now))
+        date = datetime.now().strftime("%Y-%m-%d %H:%M")
+        cursor.execute("INSERT OR IGNORE INTO users VALUES (?, ?, ?, ?)", (uid, name, user, date))
         self.conn.commit()
-
-    def get_all_users(self):
-        cursor = self.conn.cursor()
-        cursor.execute("SELECT user_id FROM users WHERE is_banned = 0")
-        return [row[0] for row in cursor.fetchall()]
 
     def get_stats(self):
         cursor = self.conn.cursor()
-        total = cursor.execute("SELECT COUNT(*) FROM users").fetchone()[0]
-        banned = cursor.execute("SELECT COUNT(*) FROM users WHERE is_banned = 1").fetchone()[0]
-        return total, banned
-
-    def ban_user(self, uid):
-        cursor = self.conn.cursor()
-        cursor.execute("UPDATE users SET is_banned = 1 WHERE user_id = ?", (uid,))
-        self.conn.commit()
-
-    def unban_user(self, uid):
-        cursor = self.conn.cursor()
-        cursor.execute("UPDATE users SET is_banned = 0 WHERE user_id = ?", (uid,))
-        self.conn.commit()
-
-    def set_config(self, key, value):
-        cursor = self.conn.cursor()
-        cursor.execute("UPDATE settings SET value = ? WHERE key = ?", (value, key))
-        self.conn.commit()
-
-    def get_config(self, key):
-        cursor = self.conn.cursor()
-        res = cursor.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
-        return res[0] if res else None
+        return cursor.execute("SELECT COUNT(*) FROM users").fetchone()[0]
 
 db = Database()
 
 # ==========================================
-# 🛠️ الدوال المساعدة (Helpers)
+# 🛠️ الدوال الذكية
 # ==========================================
 
 def get_welcome_markup():
-    """توليد زر الانضمام للقناة بشكل ديناميكي"""
-    url = db.get_config('channel_url')
+    url = db.conn.execute("SELECT value FROM settings WHERE key='channel_link'").fetchone()[0]
     markup = types.InlineKeyboardMarkup()
     markup.add(types.InlineKeyboardButton("JOIN CHANNEL FOR FIXED MATCHES 📢", url=url)) #
     return markup
 
-def send_welcome_message(chat_id):
-    """إرسال رسالة الترحيب الاحترافية المطلوبة"""
+def send_welcome(chat_id):
+    """إرسال الرسالة الترحيبية الرسمية كما في الصورة"""
     text = (
         "<b>Welcome to JOSEPH FIXED MATCHES</b> ⚽️\n\n" #
         "To get today's 100% GUARANTEED &amp; SECURE fixed scores, " #
@@ -109,132 +69,94 @@ def send_welcome_message(chat_id):
     try:
         bot.send_message(chat_id, text, reply_markup=get_welcome_markup())
         return True
-    except Exception as e:
-        logging.error(f"Error sending to {chat_id}: {e}")
-        return False
+    except: return False
 
 # ==========================================
-# 🛂 لوحة تحكم الأدمن (12 ميزة)
+# 🛂 لوحة التحكم (10 ميزات +)
 # ==========================================
 
-def admin_keyboard():
+def admin_panel():
     markup = types.ReplyKeyboardMarkup(row_width=3, resize_keyboard=True)
-    # الميزات المطلوبة
-    markup.add("📊 الإحصائيات", "📢 إذاعة نصية", "🖼 إذاعة صورة")
-    markup.add("📥 تصدير الأيديات", "🚫 حظر مستخدم", "✅ فك حظر")
-    markup.add("🔗 تغيير الرابط", "🔎 فحص أيدي", "🧹 تنظيف قاعدة البيانات")
-    markup.add("🌐 حالة السيرفر", "📝 رسالة مخصصة", "🔐 إغلاق اللوحة")
+    markup.add("📊 إحصائيات دقيقة", "📢 إذاعة نصية", "🖼 إذاعة صورة")
+    markup.add("📥 تصدير الأيديات", "🔗 تحديث الرابط", "🔎 فحص مستخدم")
+    markup.add("🚫 حظر عام", "✅ فك الحظر", "🛠 حالة النظام")
+    markup.add("📝 رسالة مخصصة", "🧹 تنظيف الداتا", "🔐 خروج")
     return markup
 
 # ==========================================
-# 🤖 معالجة الرسائل (The Core Logic)
+# 🤖 المعالجة الرئيسية (Core Logic)
 # ==========================================
 
-@bot.message_handler(commands=['start'])
-def handle_start(message):
+@bot.message_handler(func=lambda m: True, content_types=['text', 'photo', 'video', 'document', 'voice'])
+def main_processor(message):
     uid = message.chat.id
     name = message.from_user.first_name
-    user = f"@{message.from_user.username}" if message.from_user.username else "لا يوجد"
-    
-    db.add_user(uid, name, user)
-    
-    if uid != ADMIN_ID:
-        send_welcome_message(uid)
-        # إشعار للأدمن
-        stats = db.get_stats()[0]
-        notify = (
-            "تم دخول شخص جديد إلى البوت الخاص بك 👾\n"
-            "-----------------------\n"
-            "• معلومات العضو الجديد .\n\n"
-            f"• الاسم : {name}\n"
-            f"• معرف : {user}\n"
-            f"• الايدي : {uid}\n"
-            "-----------------------\n"
-            f"• عدد الأعضاء الكلي : {stats}"
-        )
-        bot.send_message(ADMIN_ID, notify)
-
-@bot.message_handler(func=lambda m: True, content_types=['text', 'photo', 'video', 'document', 'voice', 'location'])
-def master_listener(message):
-    uid = message.chat.id
+    username = f"@{message.from_user.username}" if message.from_user.username else "لا يوجد"
     text = message.text if message.text else ""
 
-    # 1. الدخول للوحة التحكم
+    # 1. دخول الأدمن بالكود
     if text == ADMIN_CODE:
-        bot.reply_to(message, "✅ <b>مرحباً بك يا زعيم!</b> تم تفعيل وضع التحكم الكامل.", reply_markup=admin_keyboard())
+        bot.reply_to(message, "✅ <b>مرحباً بك يا زعيم!</b> تم تفعيل وضع التحكم الكامل.", reply_markup=admin_panel())
         return
 
-    # 2. خاصية استخراج الأيدي والرد التلقائي (الطلب الأساسي)
+    # 2. ميزة "الصيد الذكي" للأدمن فقط
+    # إذا أرسل الأدمن رسالة الإشعار، البوت يرسل الترحيب لصاحب الأيدي فوراً
     if uid == ADMIN_ID and "الايدي :" in text:
-        # استخراج الرقم باستخدام Regex من الرسالة
-        match = re.search(r'الايدي\s*:\s*(\d+)', text)
+        match = re.search(r'الايدي\s*:\s*(\d+)', text) # استخراج الأيدي من نص الإشعار
         if match:
             target_id = match.group(1)
-            if send_welcome_message(target_id):
-                bot.reply_to(message, f"🚀 <b>تم الإرسال بنجاح!</b>\nتم تزويد صاحب الأيدي <code>{target_id}</code> برابط القناة.")
+            if send_welcome(target_id):
+                bot.reply_to(message, f"🚀 <b>تم الإرسال بنجاح!</b>\nتم إرسال رسالة الترحيب إلى الأيدي: <code>{target_id}</code>")
             else:
-                bot.reply_to(message, "❌ فشل الإرسال. قد يكون المستخدم قد قام بحظر البوت.")
+                bot.reply_to(message, "❌ فشل الإرسال (ربما حظر البوت).")
         return
 
-    # 3. معالجة أوامر لوحة التحكم
-    if uid == ADMIN_ID:
-        if text == "📊 الإحصائيات":
-            total, banned = db.get_stats()
-            bot.reply_to(message, f"📈 <b>إحصائيات البوت:</b>\n\n• الأعضاء النشطين: {total}\n• الأعضاء المحظورين: {banned}\n• الحالة: ممتاز ✅")
-        
-        elif text == "📥 تصدير الأيديات":
-            users = db.get_all_users()
-            with open("users.txt", "w") as f:
-                for u in users: f.write(f"{u}\n")
-            bot.send_document(ADMIN_ID, open("users.txt", "rb"), caption="✅ ملف الأيديات جاهز.")
-            os.remove("users.txt")
-
-        elif text == "🔗 تغيير الرابط":
-            msg = bot.reply_to(message, "ارسل الرابط الجديد للقناة الآن:")
-            bot.register_next_step_handler(msg, update_link)
-
-        elif text == "🌐 حالة السيرفر":
-            bot.reply_to(message, "🟢 <b>Server Status:</b> Active\n🕒 <b>System Time:</b> " + datetime.now().strftime("%H:%M:%S"))
-
-        elif text == "🔐 إغلاق اللوحة":
-            bot.reply_to(message, "تم إغلاق لوحة التحكم بنجاح.", reply_markup=types.ReplyKeyboardRemove())
-
-    # 4. الرد التلقائي على أي شخص آخر
+    # 3. إشعار دخول عضو جديد (للأدمن فقط ولغير الأدمن)
     if uid != ADMIN_ID:
-        db.add_user(uid, message.from_user.first_name, message.from_user.username)
-        send_welcome_message(uid)
+        # لا نرسل الإشعار إذا كان الداخل هو الأدمن نفسه
+        db.add_user(uid, name, username)
+        stats = db.get_stats()
+        
+        # إرسال إشعار للأدمن عن العضو الجديد
+        notify = (
+            "تم دخول شخص جديد إلى البوت الخاص بك 👾\n" #
+            "-----------------------\n"
+            "• معلومات العضو الجديد .\n\n" #
+            f"• الاسم : {name}\n" #
+            f"• معرف : {username}\n" #
+            f"• الايدي : {uid}\n" #
+            "-----------------------\n"
+            f"• عدد الأعضاء الكلي : {stats}" #
+        )
+        bot.send_message(ADMIN_ID, notify)
+        
+        # الرد التلقائي على العضو بالترحيب
+        send_welcome(uid)
 
-# --- وظائف إضافية للأدمن ---
-
-def update_link(message):
-    if message.text and "t.me" in message.text:
-        db.set_config('channel_url', message.text)
-        bot.reply_to(message, f"✅ تم تحديث الرابط بنجاح إلى:\n{message.text}")
-    else:
-        bot.reply_to(message, "❌ رابط غير صحيح.")
+    # 4. أوامر لوحة التحكم (للأدمن)
+    if uid == ADMIN_ID:
+        if text == "📊 إحصائيات دقيقة":
+            bot.reply_to(message, f"📈 <b>عدد الأعضاء الحالي:</b> {db.get_stats()}")
+        elif text == "📥 تصدير الأيديات":
+            cursor = db.conn.cursor()
+            users = cursor.execute("SELECT user_id FROM users").fetchall()
+            with open("users.txt", "w") as f:
+                for u in users: f.write(f"{u[0]}\n")
+            bot.send_document(ADMIN_ID, open("users.txt", "rb"), caption="✅ قائمة الأيديات المسجلة.")
+            os.remove("users.txt")
+        elif text == "🔐 خروج":
+            bot.reply_to(message, "تم إغلاق لوحة التحكم.", reply_markup=types.ReplyKeyboardRemove())
 
 # ==========================================
-# 🌐 تشغيل السيرفر والبوت (24/7)
+# 🌐 تشغيل السيرفر والبوت
 # ==========================================
 
 @app.route('/')
-def home():
-    return "Joseph Bot is alive and well!"
-
-def run():
-    app.run(host='0.0.0.0', port=os.environ.get('PORT', 8080))
-
-def keep_alive():
-    t = Thread(target=run)
-    t.start()
+def home(): return "JOSEPH SYSTEM IS ONLINE 🟢"
+def run(): app.run(host='0.0.0.0', port=os.environ.get('PORT', 8080))
+def keep_alive(): Thread(target=run).start()
 
 if __name__ == "__main__":
-    logging.info("Starting Joseph Ultimate System...")
     keep_alive()
-    # المحاولة المستمرة للتشغيل في حالة انقطاع الاتصال
-    while True:
-        try:
-            bot.polling(none_stop=True, interval=0, timeout=20)
-        except Exception as e:
-            logging.error(f"Polling error: {e}")
-            time.sleep(5)
+    print("Bot is starting...")
+    bot.infinity_polling(skip_pending=True)
