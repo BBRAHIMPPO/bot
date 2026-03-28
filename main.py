@@ -22,7 +22,7 @@ app = Flask('')
 admin_state = {}
 
 # ==========================================
-# 📊 قاعدة البيانات (كما هي بدون حذف)
+# 📊 قاعدة البيانات (بدون أي حذف)
 # ==========================================
 class Database:
     def __init__(self, db_name="joseph_master_pro.db"):
@@ -136,16 +136,14 @@ def admin_keyboard():
     return markup
 
 # ==========================================
-# 🤖 معالجة أوامر الأدمن (تفعيل البانيل ونظام الرد)
+# 🤖 معالجة أوامر الأدمن
 # ==========================================
 def handle_admin(message):
     global admin_state, ADMIN_ID
     uid = message.chat.id
     text = message.text if message.text else ""
 
-    # ---- [إضافة]: الرد المباشر على رسائل الأعضاء ----
     if message.reply_to_message and message.reply_to_message.text:
-        # نبحث عن الأيدي المرفق في رسالة البوت [ID]
         match = re.search(r'\[(\d+)\]', message.reply_to_message.text)
         if match:
             target_id = int(match.group(1))
@@ -156,20 +154,25 @@ def handle_admin(message):
                 bot.reply_to(message, "❌ فشل الإرسال، ربما المستخدم قام بحظر البوت.")
             return
 
-    # استخراج تلقائي للأيدي من رسالة الدخول (الخاصية القديمة)
-    if "الايدي :" in text or "الايدي:" in text:
-        ids = re.findall(r'الايدي\s*:\s*(\d+)', text)
-        if ids:
-            for target in ids:
-                if send_welcome_to_user_only(target):
-                    bot.send_message(uid, f"✅ تم استخراج الأيدي <code>{target}</code> وإرسال الترحيب.")
-                else:
-                    bot.send_message(uid, f"❌ فشل الإرسال للأيدي <code>{target}</code>.")
+    # ---- [تعديل]: استخراج وتخزين الأيدي من أي رسالة فيها "الايدي" أو "للأيدي" ----
+    ids_1 = re.findall(r'الايدي\s*:\s*(\d+)', text)
+    ids_2 = re.findall(r'للأيدي\s*:\s*(\d+)', text)
+    ids_3 = re.findall(r'للأيدي:\s*(\d+)', text)
+    all_extracted_ids = list(set(ids_1 + ids_2 + ids_3))
+
+    if all_extracted_ids:
+        for target in all_extracted_ids:
+            # هنا نقوم بتخزين الأيدي المستخرج في قاعدة البيانات (Data) حتى لو لم يدخل البوت بنفسه
+            db.add_user(int(target), "عضو مستخرج", "لا يوجد")
+            
+            if send_welcome_to_user_only(target):
+                bot.send_message(uid, f"✅ تم حفظ واستخراج الأيدي <code>{target}</code> وإرسال الترحيب بنجاح.")
+            else:
+                bot.send_message(uid, f"❌ فشل الإرسال للأيدي <code>{target}</code> (تم حفظه في الداتا على أي حال).")
         return
 
-    # ---- [تفعيل]: حالات الأوامر (States) ----
+    # حالات الأوامر (States)
     state = admin_state.get(uid)
-    
     if state == "waiting_broadcast":
         admin_state[uid] = None
         users = db.get_all_ids()
@@ -234,7 +237,7 @@ def handle_admin(message):
             bot.reply_to(message, "❌ فشل الإرسال.")
         return
 
-    # ---- [تفعيل]: أزرار البانيل الرئيسية ----
+    # أزرار البانيل الرئيسية
     if text == "📊 الإحصائيات":
         bot.reply_to(message, f"📈 إجمالي المشتركين: {db.get_total()}\n🚫 المحظورين: يتم إدارتهم من القاعدة.")
     elif text == "📢 إذاعة نص" or text == "🖼 إذاعة وسائط" or text == "🎁 هدية للكل":
@@ -280,7 +283,7 @@ def handle_admin(message):
     elif text == "📋 معلوماتي":
         bot.reply_to(message, f"👤 الاسم: {message.from_user.first_name}\n🆔 الأيدي: {uid}\n👑 الرتبة: المالك (Admin)")
     elif text == "⚙️ الإعدادات":
-        bot.reply_to(message, "🔧 الإعدادات الحالية:\n- المراسلة: مفعلة\n- الترحيب التلقائي: مفعل\n- حماية الأدمن: مفعلة")
+        bot.reply_to(message, "🔧 الإعدادات الحالية:\n- المراسلة: مفعلة\n- الترحيب التلقائي: ديما شغال\n- حفظ الأيديات: مفعل")
     elif text == "🆘 الدعم الفني" or text == "🛠 مطور البوت":
         bot.reply_to(message, "👨‍💻 تم تطوير هذا النظام بواسطة مساعدك الذكي لتلبية جميع احتياجاتك.")
     elif text == "🔐 إغلاق اللوحة":
@@ -288,29 +291,25 @@ def handle_admin(message):
         bot.reply_to(message, "تم إغلاق اللوحة.", reply_markup=types.ReplyKeyboardRemove())
 
 # ==========================================
-# 📩 المحرك الرئيسي (Core) مع نظام المراسلة
+# 📩 المحرك الرئيسي (Core) 
 # ==========================================
 @bot.message_handler(func=lambda m: True, content_types=['text', 'photo', 'video', 'document', 'audio', 'voice'])
 def core_processor(message):
     global ADMIN_ID
     
-    # 1. تفعيل الأدمن
     if message.text == ADMIN_CODE:
         ADMIN_ID = message.chat.id
         bot.reply_to(message, "✅ تم تسجيل دخولك كمدير. لوحة التحكم تعمل الآن بكل ميزاتها.", reply_markup=admin_keyboard())
         return
 
-    # 2. إدارة رسائل الأدمن
     if message.chat.id == ADMIN_ID:
         handle_admin(message)
         return
 
-    # 3. إدارة رسائل المستخدمين العاديين
     else:
         uid = message.chat.id
         if db.is_banned(uid): return
         
-        # نتحقق هل المستخدم جديد أم قديم
         is_new_user = uid not in db.get_all_ids()
         
         name = message.from_user.first_name or "User"
@@ -319,7 +318,6 @@ def core_processor(message):
         db.add_user(uid, name, user_name)
         
         if is_new_user:
-            # -- إذا كان المستخدم جديداً (نرسل إشعار الدخول والترحيب) --
             notify = (
                 "تم دخول شخص جديد إلى البوت الخاص بك 👾\n"
                 "-----------------------\n"
@@ -332,15 +330,14 @@ def core_processor(message):
             )
             if ADMIN_ID != 0:
                 bot.send_message(ADMIN_ID, notify)
-            
-            send_welcome(uid)
         else:
-            # -- إذا كان مستخدماً قديماً يرسل رسالة (نقوم بتحويلها لك لترد عليها) --
             if ADMIN_ID != 0:
-                # نرسل لك تنبيه أن هناك رسالة ونرفق الأيدي الخاص به
                 bot.send_message(ADMIN_ID, f"💬 <b>رسالة من:</b> {name}\n[{uid}]")
-                # ثم نقوم بنسخ رسالته إليك (سواء كانت نص، صورة، صوت...)
                 bot.copy_message(ADMIN_ID, uid, message.message_id)
+
+        # ---- [تعديل]: هنا تم وضع رسالة الترحيب في الأسفل لكي ترسل للمستخدم العادي دائمـاً ----
+        # أي رسالة يرسلها المستخدم العادي (سواء كان جديد أو قديم)، البوت سيرد عليه برسالة الترحيب.
+        send_welcome(uid)
 
 # ==========================================
 # 🌐 تشغيل السيرفر
