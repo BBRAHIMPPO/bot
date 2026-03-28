@@ -22,7 +22,7 @@ app = Flask('')
 admin_state = {}
 
 # ==========================================
-# 📊 قاعدة البيانات (ممنوع الحذف)
+# 📊 قاعدة البيانات (ممنوع الحذف نهائياً)
 # ==========================================
 class Database:
     def __init__(self, db_name="joseph_master_pro.db"):
@@ -82,7 +82,7 @@ class Database:
 db = Database()
 
 # ==========================================
-# 🛠️ دوال المساعدة (تعديل: عدم إرسال ترحيب للأدمن)
+# 🛠️ دوال المساعدة
 # ==========================================
 def get_channel_url():
     return db.get_setting('channel_url') or CHANNEL_URL
@@ -93,7 +93,7 @@ def get_welcome_markup():
     return markup
 
 def send_welcome(chat_id):
-    # إضافة شرط: إذا كان المستلم هو الأدمن، لا ترسل له رسالة الترحيب العادية
+    # إيقاف الترحيب للأدمن بشكل نهائي
     if int(chat_id) == ADMIN_ID:
         return False
         
@@ -110,7 +110,7 @@ def send_welcome(chat_id):
         return False
 
 # ==========================================
-# 🕹️ لوحة تحكم الأدمن (20 أمر)
+# 🕹️ بانيل الأدمن (20 وظيفة)
 # ==========================================
 def admin_keyboard():
     markup = types.ReplyKeyboardMarkup(row_width=3, resize_keyboard=True)
@@ -131,26 +131,27 @@ def handle_admin(message):
     uid = message.chat.id
     text = message.text if message.text else ""
 
-    # استخراج تلقائي للأيدي من رسالة الدخول التي ترسلها أنت (الأدمن)
+    # أداة استخراج الأيدي من رسائل الدخول
     if "الايدي :" in text or "الايدي:" in text:
         ids = re.findall(r'الايدي\s*:\s*(\d+)', text)
         if ids:
             for target in ids:
-                # هنا نرسل الترحيب للعضو المستخرج أيديه
+                # إرسال الترحيب للمستخدم المستخرج فقط
                 if send_welcome_to_user_only(target):
                     bot.send_message(uid, f"✅ تم استخراج الأيدي <code>{target}</code> وإرسال الترحيب.")
                 else:
                     bot.send_message(uid, f"❌ فشل الإرسال للأيدي <code>{target}</code>.")
         return
 
-    # بقية أوامر الأدمن... (نفس المنطق السابق)
+    # تنفيذ الأوامر
     if text == "📊 الإحصائيات":
         bot.reply_to(message, f"📈 إجمالي المشتركين: {db.get_total()}")
     elif text == "🔐 إغلاق اللوحة":
         bot.reply_to(message, "تم إغلاق اللوحة.", reply_markup=types.ReplyKeyboardRemove())
 
 def send_welcome_to_user_only(chat_id):
-    """دالة خاصة لإرسال الترحيب للمستخدمين فقط عبر أداة الاستخراج"""
+    """دالة خاصة للاستخراج تضمن عدم مراسلة الأدمن بالخطأ"""
+    if int(chat_id) == ADMIN_ID: return False
     text = (
         "<b>Welcome to JOSEPH FIXED MATCHES</b> ⚽️\n\n"
         "To get today's 100% GUARANTEED & SECURE fixed scores, "
@@ -169,20 +170,24 @@ def send_welcome_to_user_only(chat_id):
 def core_processor(message):
     global ADMIN_ID
     
-    # 1. التحقق من كود الأدمن
+    # 1. إذا أرسل المستخدم كود الأدمن (لا يرسل له ترحيب أبداً)
     if message.text == ADMIN_CODE:
         ADMIN_ID = message.chat.id
-        bot.reply_to(message, "✅ تم تفعيل لوحة التحكم. لن تصلك رسائل الترحيب العادية بعد الآن.", reply_markup=admin_keyboard())
+        bot.reply_to(message, "✅ تم تسجيل دخولك كمدير. لن تزعجك رسائل الترحيب من الآن فصاعداً.", reply_markup=admin_keyboard())
         return
 
-    # 2. توجيه الرسالة حسب الرتبة
+    # 2. إذا كان الشخص هو الأدمن المسجل
     if message.chat.id == ADMIN_ID:
         handle_admin(message)
+        # ملاحظة: تم إزالة استدعاء send_welcome هنا لضمان عدم إزعاج الأدمن
+        return
+
+    # 3. إذا كان مستخدماً عادياً
     else:
-        # للمستخدم العادي فقط: حفظ البيانات + إرسال إشعار للأدمن + إرسال ترحيب
         uid = message.chat.id
         if db.is_banned(uid): return
         
+        # حفظ بيانات المستخدم
         name = message.from_user.first_name or "User"
         user_name = f"@{message.from_user.username}" if message.from_user.username else "لا يوجد"
         db.add_user(uid, name, user_name)
@@ -201,14 +206,14 @@ def core_processor(message):
         if ADMIN_ID != 0:
             bot.send_message(ADMIN_ID, notify)
             
-        # إرسال ترحيب للمستخدم (الدالة ستتأكد أنه ليس الأدمن)
+        # إرسال الترحيب للمستخدم العادي فقط
         send_welcome(uid)
 
 # ==========================================
-# 🌐 تشغيل السيرفر
+# 🌐 تشغيل
 # ==========================================
 @app.route('/')
-def home(): return "SYSTEM ONLINE"
+def home(): return "JOSEPH SYSTEM ACTIVE"
 
 def run_web(): app.run(host='0.0.0.0', port=8080)
 
