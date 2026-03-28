@@ -1,6 +1,11 @@
 import telebot
+import sqlite3
+import os
 import re
+from flask import Flask  # هادي هي اللي كانت فيها المشكل (f صغيرة)
+from threading import Thread
 from telebot import types
+from datetime import datetime
 
 # ==========================================
 # ⚙️ الإعدادات (معلوماتك من الصور)
@@ -10,6 +15,7 @@ ADMIN_ID = 718991554
 CHANNEL_URL = "https://t.me/+wZCOH72-1To3YWFk"
 
 bot = telebot.TeleBot(API_TOKEN, parse_mode="HTML")
+app = Flask(__name__)
 
 # ==========================================
 # 🛠️ دالة الترحيب الرسمية
@@ -27,7 +33,7 @@ def send_welcome_to_user(target_id):
     try:
         bot.send_message(target_id, text, reply_markup=markup)
         return True
-    except Exception as e:
+    except:
         return False
 
 # ==========================================
@@ -35,48 +41,47 @@ def send_welcome_to_user(target_id):
 # ==========================================
 
 @bot.message_handler(func=lambda m: True)
-def handle_admin_commands(message):
+def handle_messages(message):
     uid = message.chat.id
     text = message.text if message.text else ""
 
-    # 1. إذا كان المرسل هو الأدمن (نتا)
+    # 1. نظام الأدمن (نتا)
     if uid == ADMIN_ID:
-        # الحالة أ: صيفطتي رقم أيدي بوحدو (مثلاً: 5077384676)
+        # إرسال مباشر بالأيدي (مثلاً تصيفط: 5077384676)
         if text.isdigit():
-            bot.send_chat_action(uid, 'typing')
             if send_welcome_to_user(text):
-                bot.reply_to(message, f"✅ <b>تم الإرسال!</b>\nالرسالة وصلت لصاحب الأيدي: <code>{text}</code>")
+                bot.reply_to(message, f"✅ <b>تم الإرسال!</b> للأيدي: <code>{text}</code>")
             else:
-                bot.reply_to(message, f"❌ <b>فشل!</b>\nصاحب الأيدي <code>{text}</code> بلوكا البوت أو الأيدي غلط.")
+                bot.reply_to(message, f"❌ <b>فشل!</b> الأيدي غلط أو المستخدم حظر البوت.")
             return
 
-        # الحالة ب: حولتي ليه الإشعار الطويل (الصيد التلقائي)
+        # نظام الصيد (تحويل الإشعارات)
         if "الايدي :" in text:
             match = re.search(r'الايدي\s*:\s*(\d+)', text)
             if match:
                 target_id = match.group(1)
                 if send_welcome_to_user(target_id):
-                    bot.reply_to(message, f"🚀 <b>تم الصيد بنجاح!</b>\nصيفت لـ: <code>{target_id}</code>")
+                    bot.reply_to(message, f"🚀 <b>تم بنجاح!</b> صيفت لـ: <code>{target_id}</code>")
                 else:
-                    bot.reply_to(message, f"❌ <b>فشل الصيد!</b> المستخدم حظر البوت.")
+                    bot.reply_to(message, f"❌ <b>فشل!</b>")
             return
-            
-        # نتا كأدمن، البوت مغيصيفطش ليك "مرحباً بك" نهائياً
-        return
-
-    # 2. إذا كان المرسل مستخدم عادي (ماشي نتا)
-    else:
-        # أي واحد غريب كيدخل، كيصيفط ليه الترحيب أوتوماتيكياً
-        send_welcome_to_user(uid)
         
-        # إشعار ليك نتا باش تعرف بلي كاين "ضحية" جديد
-        notify = (
-            "👾 <b>عضو جديد دخل للبوت!</b>\n"
-            f"• الاسم: {message.from_user.first_name}\n"
-            f"• الايدي: <code>{uid}</code>"
-        )
+        return # الأدمن مابيوصلوش ترحيب مكرر
+
+    # 2. نظام المستخدمين
+    else:
+        send_welcome_to_user(uid)
+        notify = f"👾 <b>عضو جديد دخل!</b>\n• الايدي: <code>{uid}</code>"
         bot.send_message(ADMIN_ID, notify)
 
+# ==========================================
+# 🌐 الحفاظ على التشغيل
+# ==========================================
+@app.route('/')
+def home(): return "JOSEPH BOT ACTIVE 🟢"
+def run(): app.run(host='0.0.0.0', port=8080)
+def keep_alive(): Thread(target=run).start()
+
 if __name__ == "__main__":
-    print("JOSEPH SENDER IS READY...")
+    keep_alive()
     bot.infinity_polling(skip_pending=True)
