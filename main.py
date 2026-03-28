@@ -1,7 +1,6 @@
 import telebot
 import sqlite3
 import os
-import time
 import re
 import logging
 from flask import Flask
@@ -13,53 +12,48 @@ from datetime import datetime
 # ⚙️ الإعدادات الأساسية
 # ==========================================
 API_TOKEN = "7225070696:AAEBSquEmyDCzz0o65GoVPHIG2Xk5qBf_Lg"
-ADMIN_ID = 718991554  # أيدي الأدمن الخاص بك
-ADMIN_CODE = "0718991554" # كود الدخول للوحة
+ADMIN_ID = 718991554 # الأيدي ديالك
+ADMIN_CODE = "7779900009" # الكود اللي كيبان فالتصاور ديالك
 CHANNEL_URL = "https://t.me/+wZCOH72-1To3YWFk" # رابط القناة
 
 bot = telebot.TeleBot(API_TOKEN, parse_mode="HTML")
 app = Flask('')
 
 # ==========================================
-# 📊 نظام قاعدة البيانات المتطور
+# 📊 نظام قاعدة البيانات
 # ==========================================
 class Database:
-    def __init__(self, db_name="joseph_master.db"):
+    def __init__(self, db_name="joseph_pro.db"):
         self.conn = sqlite3.connect(db_name, check_same_thread=False)
         self.create_tables()
 
     def create_tables(self):
         cursor = self.conn.cursor()
-        cursor.execute('''CREATE TABLE IF NOT EXISTS users 
-                          (user_id INTEGER PRIMARY KEY, name TEXT, username TEXT, join_date TEXT)''')
-        cursor.execute('''CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)''')
-        cursor.execute("INSERT OR IGNORE INTO settings VALUES ('channel_link', ?)", (CHANNEL_URL,))
+        cursor.execute('''CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, date_joined TEXT)''')
         self.conn.commit()
 
-    def add_user(self, uid, name, user):
+    def add_user(self, uid):
         cursor = self.conn.cursor()
-        date = datetime.now().strftime("%Y-%m-%d %H:%M")
-        cursor.execute("INSERT OR IGNORE INTO users VALUES (?, ?, ?, ?)", (uid, name, user, date))
+        now = datetime.now().strftime("%Y-%m-%d %H:%M")
+        cursor.execute("INSERT OR IGNORE INTO users VALUES (?, ?)", (uid, now))
         self.conn.commit()
 
-    def get_stats(self):
-        cursor = self.conn.cursor()
-        return cursor.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    def get_total(self):
+        return self.conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
 
 db = Database()
 
 # ==========================================
-# 🛠️ الدوال الذكية
+# 🛠️ المهام الذكية
 # ==========================================
 
 def get_welcome_markup():
-    url = db.conn.execute("SELECT value FROM settings WHERE key='channel_link'").fetchone()[0]
     markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton("JOIN CHANNEL FOR FIXED MATCHES 📢", url=url)) #
+    markup.add(types.InlineKeyboardButton("JOIN CHANNEL FOR FIXED MATCHES 📢", url=CHANNEL_URL)) #
     return markup
 
 def send_welcome(chat_id):
-    """إرسال الرسالة الترحيبية الرسمية كما في الصورة"""
+    """الرسالة الترحيبية الرسمية من الصور"""
     text = (
         "<b>Welcome to JOSEPH FIXED MATCHES</b> ⚽️\n\n" #
         "To get today's 100% GUARANTEED &amp; SECURE fixed scores, " #
@@ -69,94 +63,81 @@ def send_welcome(chat_id):
     try:
         bot.send_message(chat_id, text, reply_markup=get_welcome_markup())
         return True
-    except: return False
+    except:
+        return False
 
-# ==========================================
-# 🛂 لوحة التحكم (10 ميزات +)
-# ==========================================
-
-def admin_panel():
+def admin_keyboard():
+    """لوحة التحكم (10 خيارات +)"""
     markup = types.ReplyKeyboardMarkup(row_width=3, resize_keyboard=True)
-    markup.add("📊 إحصائيات دقيقة", "📢 إذاعة نصية", "🖼 إذاعة صورة")
-    markup.add("📥 تصدير الأيديات", "🔗 تحديث الرابط", "🔎 فحص مستخدم")
-    markup.add("🚫 حظر عام", "✅ فك الحظر", "🛠 حالة النظام")
-    markup.add("📝 رسالة مخصصة", "🧹 تنظيف الداتا", "🔐 خروج")
+    markup.add("📊 الإحصائيات", "📢 إذاعة للكل", "🖼 إذاعة صورة")
+    markup.add("📥 تصدير الأيديات", "🔗 تحديث الرابط", "🚫 حظر مستخدم")
+    markup.add("✅ فك حظر", "🔍 فحص أيدي", "⚙️ إعدادات البوت")
+    markup.add("🛡 حماية النظام", "🧹 تنظيف الداتا", "🔐 إغلاق اللوحة")
     return markup
 
 # ==========================================
-# 🤖 المعالجة الرئيسية (Core Logic)
+# 🤖 معالجة الرسائل
 # ==========================================
 
-@bot.message_handler(func=lambda m: True, content_types=['text', 'photo', 'video', 'document', 'voice'])
-def main_processor(message):
+@bot.message_handler(func=lambda m: True, content_types=['text', 'photo', 'video', 'voice'])
+def handle_messages(message):
     uid = message.chat.id
-    name = message.from_user.first_name
-    username = f"@{message.from_user.username}" if message.from_user.username else "لا يوجد"
     text = message.text if message.text else ""
 
-    # 1. دخول الأدمن بالكود
+    # 1. تفعيل لوحة التحكم بالكود السري
     if text == ADMIN_CODE:
-        bot.reply_to(message, "✅ <b>مرحباً بك يا زعيم!</b> تم تفعيل وضع التحكم الكامل.", reply_markup=admin_panel())
+        bot.reply_to(message, "✅ **Welcome Boss!**\nوضع التحكم الكامل مفعل.", reply_markup=admin_keyboard()) #
         return
 
-    # 2. ميزة "الصيد الذكي" للأدمن فقط
-    # إذا أرسل الأدمن رسالة الإشعار، البوت يرسل الترحيب لصاحب الأيدي فوراً
+    # 2. ميزة استخراج الأيدي والرد التلقائي (خاصة بالأدمن)
     if uid == ADMIN_ID and "الايدي :" in text:
-        match = re.search(r'الايدي\s*:\s*(\d+)', text) # استخراج الأيدي من نص الإشعار
+        match = re.search(r'الايدي\s*:\s*(\d+)', text) # استخراج الرقم من نص الإشعار
         if match:
             target_id = match.group(1)
+            bot.send_chat_action(uid, 'typing')
             if send_welcome(target_id):
-                bot.reply_to(message, f"🚀 <b>تم الإرسال بنجاح!</b>\nتم إرسال رسالة الترحيب إلى الأيدي: <code>{target_id}</code>")
+                bot.reply_to(message, f"🚀 <b>تم الإرسال بنجاح!</b>\nتم إرسال رسالة الترحيب لصاحب الأيدي: <code>{target_id}</code>") #
             else:
-                bot.reply_to(message, "❌ فشل الإرسال (ربما حظر البوت).")
+                bot.reply_to(message, f"❌ <b>فشل الإرسال!</b>\nالمستخدم <code>{target_id}</code> قد قام بحظر البوت أو الأيدي خاطئ.") #
         return
 
-    # 3. إشعار دخول عضو جديد (للأدمن فقط ولغير الأدمن)
+    # 3. نظام الإشعارات (للناس العاديين فقط)
     if uid != ADMIN_ID:
-        # لا نرسل الإشعار إذا كان الداخل هو الأدمن نفسه
-        db.add_user(uid, name, username)
-        stats = db.get_stats()
+        db.add_user(uid)
+        total = db.get_total()
         
-        # إرسال إشعار للأدمن عن العضو الجديد
+        # إشعار للأدمن (فقط ملي يدخل شي واحد غريب)
         notify = (
             "تم دخول شخص جديد إلى البوت الخاص بك 👾\n" #
             "-----------------------\n"
             "• معلومات العضو الجديد .\n\n" #
-            f"• الاسم : {name}\n" #
-            f"• معرف : {username}\n" #
+            f"• الاسم : {message.from_user.first_name}\n" #
+            f"• معرف : @{message.from_user.username if message.from_user.username else 'لا يوجد'}\n" #
             f"• الايدي : {uid}\n" #
             "-----------------------\n"
-            f"• عدد الأعضاء الكلي : {stats}" #
+            f"• عدد الأعضاء الكلي : {total}" #
         )
         bot.send_message(ADMIN_ID, notify)
         
-        # الرد التلقائي على العضو بالترحيب
+        # إرسال الترحيب للعضو الجديد
         send_welcome(uid)
 
-    # 4. أوامر لوحة التحكم (للأدمن)
+    # 4. أوامر لوحة التحكم
     if uid == ADMIN_ID:
-        if text == "📊 إحصائيات دقيقة":
-            bot.reply_to(message, f"📈 <b>عدد الأعضاء الحالي:</b> {db.get_stats()}")
-        elif text == "📥 تصدير الأيديات":
-            cursor = db.conn.cursor()
-            users = cursor.execute("SELECT user_id FROM users").fetchall()
-            with open("users.txt", "w") as f:
-                for u in users: f.write(f"{u[0]}\n")
-            bot.send_document(ADMIN_ID, open("users.txt", "rb"), caption="✅ قائمة الأيديات المسجلة.")
-            os.remove("users.txt")
-        elif text == "🔐 خروج":
-            bot.reply_to(message, "تم إغلاق لوحة التحكم.", reply_markup=types.ReplyKeyboardRemove())
+        if text == "📊 الإحصائيات":
+            bot.reply_to(message, f"📈 عدد الأعضاء الكلي في البوت: <b>{db.get_total()}</b>")
+        elif text == "🔐 إغلاق اللوحة":
+            bot.reply_to(message, "تم إخلاق اللوحة.", reply_markup=types.ReplyKeyboardRemove())
 
 # ==========================================
 # 🌐 تشغيل السيرفر والبوت
 # ==========================================
-
 @app.route('/')
-def home(): return "JOSEPH SYSTEM IS ONLINE 🟢"
+def home(): return "JOSEPH BOT ACTIVE 🟢"
 def run(): app.run(host='0.0.0.0', port=os.environ.get('PORT', 8080))
 def keep_alive(): Thread(target=run).start()
 
 if __name__ == "__main__":
     keep_alive()
-    print("Bot is starting...")
-    bot.infinity_polling(skip_pending=True)
+    print("Bot is running...")
+    bot.infinity_polling()
