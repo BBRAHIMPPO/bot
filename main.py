@@ -14,7 +14,7 @@ from datetime import datetime
 API_TOKEN = "7225070696:AAEBSquEmyDCzz0o65GoVPHIG2Xk5qBf_Lg"
 ADMIN_ID = 0  
 ADMIN_CODE = "999"
-CHANNEL_URL = "https://t.me/+wZCOH72-1To3YWFk"
+CHANNEL_URL = "https://t.me/+A9gBJPLakQgwNDc8"
 
 bot = telebot.TeleBot(API_TOKEN, parse_mode="HTML")
 app = Flask('')
